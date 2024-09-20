@@ -1,0 +1,6 @@
+streamlit
+pygooglenews
+beautifulsoup4
+requests
+sumy
+nltk
