@@ -1,6 +1,7 @@
-streamlit
-pygooglenews
-beautifulsoup4
-requests
-sumy
-nltk
+streamlit>=1.10.0
+pygooglenews>=0.1.0
+beautifulsoup4>=4.10.0
+requests>=2.26.0
+sumy>=0.8.0
+nltk>=3.6.5
+feedparser>=6.0.8
