@@ -1,6 +1,5 @@
 import streamlit as st
-import csv
-from pygooglenews import GoogleNews
+from GoogleNews import GoogleNews
 from bs4 import BeautifulSoup
 from datetime import datetime, timedelta
 import requests
@@ -18,7 +17,7 @@ def get_full_article_text(url):
         response = requests.get(url)
         if response.status_code == 200:
             soup = BeautifulSoup(response.content, "html.parser")
-            paragraphs = soup.find_all('p')  # Assuming the article text is in <p> tags
+            paragraphs = soup.find_all('p')
             full_text = ' '.join([para.get_text() for para in paragraphs])
             return full_text
         else:
@@ -38,23 +37,18 @@ def generate_summary(text, sentence_count=3):
         st.error(f"Error summarizing article: {str(e)}")
         return text[:250] + '...'  # Fallback to truncating the first 250 characters
 
-# Function to search for news articles
+# Function to search for news articles using GoogleNews
 def search_articles(query, start_date, end_date, article_limit):
     gn = GoogleNews()
-    news_data = []
+    gn.set_lang('en')
+    gn.set_time_range(start_date.strftime('%m/%d/%Y'), end_date.strftime('%m/%d/%Y'))
     search_results = gn.search(query)  # Perform the search
+    news_data = []
 
-    for entry in search_results["entries"]:
+    for entry in gn.results()[:article_limit]:
         title = entry.get("title", "N/A")
         link = entry.get("link", "N/A")
-        published = entry.get("published", "N/A")
-
-        # Clean the summary using BeautifulSoup to remove HTML tags
-        summary_html = entry.get("summary", "N/A")
-        summary_soup = BeautifulSoup(summary_html, "html.parser")
-        summary_clean = summary_soup.get_text(strip=True)
-
-        source = entry.get("source", {}).get("title", "N/A")
+        published = entry.get("date", "N/A")
 
         # Fetch the full article text from the link
         full_article_text = get_full_article_text(link)
@@ -62,16 +56,8 @@ def search_articles(query, start_date, end_date, article_limit):
         # Generate a summarized version of the full article
         summary_generated = generate_summary(full_article_text)
 
-        # Handle sub-articles
-        sub_articles = entry.get("sub_articles", [])
-        sub_articles_info = '; '.join([f"{sub.get('title', 'N/A')} ({sub.get('publisher', 'N/A')} - {sub.get('link', 'N/A')})" for sub in sub_articles])
-
         # Append data to news_data list
-        news_data.append([title, link, published, summary_generated, source, full_article_text, sub_articles_info])
-
-        # Stop collecting if the limit is reached
-        if len(news_data) >= article_limit:
-            break
+        news_data.append([title, link, published, summary_generated, full_article_text])
 
     return news_data
 
@@ -100,7 +86,7 @@ if st.button("Search News"):
             st.write(news_data[:3])  # Display first few articles for preview
 
             # Prepare CSV data
-            csv_headers = ['Title', 'Link', 'Published', 'Summary', 'Source', 'Full Article', 'Sub-Articles']
+            csv_headers = ['Title', 'Link', 'Published', 'Summary', 'Full Article']
             csv_data = [csv_headers] + news_data
 
             # Function to convert the data into a CSV format
