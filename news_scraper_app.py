@@ -64,15 +64,16 @@ st.write("Search and collect news articles with summaries.")
 
 # Input fields
 query = st.text_input("Search Query", "Sheikh Hasina")
-start_date = st.date_input("Start Date", datetime(2023, 1, 1))
-end_date = st.date_input("End Date", datetime(2023, 12, 31))
+start_date = st.date_input("Start Date", datetime(2023, 1, 1).date())
+end_date = st.date_input("End Date", datetime(2023, 12, 31).date())
 article_limit = st.slider("Number of Articles to Collect", 1, 100, 10)
 
 # Function to check if the article falls within the date range
 def filter_articles_by_date(news_data, start_date, end_date):
     filtered_articles = []
     for article in news_data:
-        article_date = datetime.strptime(article['pub_date'], '%a, %d %b %Y %H:%M:%S %Z')
+        article_date = datetime.strptime(article['pub_date'], '%a, %d %b %Y %H:%M:%S %Z').date()
+        # Compare dates directly
         if start_date <= article_date <= end_date:
             filtered_articles.append(article)
     return filtered_articles
