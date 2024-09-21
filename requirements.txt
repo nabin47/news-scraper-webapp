@@ -1,5 +1,4 @@
 streamlit>=1.10.0
-googlenews-python==1.6.5
 beautifulsoup4>=4.10.0
 requests>=2.26.0
 sumy>=0.8.0
