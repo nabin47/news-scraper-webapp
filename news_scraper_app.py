@@ -105,3 +105,28 @@ if st.button("Search News"):
             file_name="news_articles.csv",
             mime="text/csv"
         )
+
+# Copyright portion
+
+st.markdown(
+    """
+    <style>
+    .footer {
+        position: fixed;
+        left: 0;
+        bottom: 0;
+        width: 100%;
+        background-color: lightgray;
+        color: black;
+        text-align: center;
+        padding: 10px;
+        font-size: 14px;
+    }
+    </style>
+    <div class="footer">
+        © 2024 Jubair Ahmed Nabin. All rights reserved.
+    </div>
+    """,
+    unsafe_allow_html=True
+)
+
