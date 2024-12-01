@@ -1,147 +1,96 @@
-import streamlit as st
-from bs4 import BeautifulSoup
-from datetime import datetime
+import os
 import requests
-from sumy.parsers.plaintext import PlaintextParser
-from sumy.nlp.tokenizers import Tokenizer
-from sumy.summarizers.lsa import LsaSummarizer
-import nltk
+import pandas as pd
+from io import BytesIO
+import streamlit as st
 
-# Download NLTK data
-nltk.download('punkt')
+# Load the API key from environment variables
+API_KEY = os.getenv("API_KEY")
 
-# Function to fetch news articles from Google News RSS feed
-def fetch_google_news(query):
-    url = f"https://news.google.com/rss/search?q={query}"
-    response = requests.get(url)
-    soup = BeautifulSoup(response.content, "xml")
-    items = soup.find_all("item")
-    
-    news_items = []
-    for item in items:
-        title = item.title.text
-        link = item.link.text
-        pub_date = item.pubDate.text
-        description = BeautifulSoup(item.description.text, "html.parser").text
-        news_items.append({
-            'title': title,
-            'link': link,
-            'pub_date': pub_date,
-            'description': description
-        })
-    
-    return news_items
+# Check if API_KEY is available
+if not API_KEY:
+    st.error("API key not found! Please set it as an environment variable in Streamlit Cloud.")
+    st.stop()
 
-# Function to fetch the full article text from the given URL
-def get_full_article_text(url):
-    try:
-        response = requests.get(url)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.content, "html.parser")
-            paragraphs = soup.find_all('p')
-            full_text = ' '.join([para.get_text() for para in paragraphs])
-            return full_text
+# NewsAPI configuration
+BASE_URL = "https://newsapi.org/v2/everything"
+
+# Function to fetch news
+def fetch_news(keyword, from_date, to_date):
+    params = {
+        "q": keyword,
+        "from": from_date,
+        "to": to_date,
+        "sortBy": "relevancy",
+        "pageSize": 100,
+        "apiKey": API_KEY,
+    }
+    response = requests.get(BASE_URL, params=params)
+    if response.status_code == 200:
+        data = response.json()
+        if data.get("status") == "ok":
+            return data.get("articles", [])
         else:
-            return "N/A"
-    except Exception as e:
-        st.error(f"Error fetching article text from {url}: {str(e)}")
-        return "N/A"
+            st.error(f"Error: {data.get('message')}")
+            return []
+    else:
+        st.error("Failed to fetch data from NewsAPI.")
+        return []
 
-# Function to summarize the full article text using sumy (LSA method)
-def generate_summary(text, sentence_count=3):
-    try:
-        parser = PlaintextParser.from_string(text, Tokenizer("english"))
-        summarizer = LsaSummarizer()
-        summary = summarizer(parser.document, sentence_count)
-        return ' '.join([str(sentence) for sentence in summary])
-    except Exception as e:
-        st.error(f"Error summarizing article: {str(e)}")
-        return text[:250] + '...'  # Fallback to truncating the first 250 characters
+# Function to convert articles to a DataFrame
+def articles_to_dataframe(articles):
+    return pd.DataFrame(
+        [
+            {
+                "Title": article["title"],
+                "Description": article["description"],
+                "Published At": article["publishedAt"],
+                "Source": article["source"]["name"],
+                "URL": article["url"],
+            }
+            for article in articles
+        ]
+    )
 
-# Streamlit app layout
-st.title("News Scraper Web App")
-st.write("Search and collect news articles with summaries.")
+# Function to convert DataFrame to Excel file
+def to_excel(df):
+    output = BytesIO()
+    with pd.ExcelWriter(output, engine="openpyxl") as writer:
+        df.to_excel(writer, index=False, sheet_name="Articles")
+    processed_data = output.getvalue()
+    return processed_data
+
+# Streamlit UI
+st.title("News Fetcher App")
+st.write("Fetch news articles by keyword and date range, and download them as an Excel file.")
 
 # Input fields
-query = st.text_input("Search Query", "Sheikh Hasina")
-start_date = st.date_input("Start Date", datetime(2023, 1, 1).date())
-end_date = st.date_input("End Date", datetime(2023, 12, 31).date())
-article_limit = st.slider("Number of Articles to Collect", 1, 100, 10)
+keyword = st.text_input("Enter keyword(s):", placeholder="e.g., AI, climate change")
+from_date = st.date_input("From Date")
+to_date = st.date_input("To Date")
 
-# Function to check if the article falls within the date range
-def filter_articles_by_date(news_data, start_date, end_date):
-    filtered_articles = []
-    for article in news_data:
-        article_date = datetime.strptime(article['pub_date'], '%a, %d %b %Y %H:%M:%S %Z').date()
-        # Compare dates directly
-        if start_date <= article_date <= end_date:
-            filtered_articles.append(article)
-    return filtered_articles
+# Fetch news button
+if st.button("Fetch News"):
+    if keyword and from_date and to_date:
+        with st.spinner("Fetching news..."):
+            articles = fetch_news(keyword, from_date, to_date)
+            if articles:
+                st.success(f"Found {len(articles)} articles.")
+                df = articles_to_dataframe(articles)
+                st.dataframe(df)
 
-# Button to trigger search
-if st.button("Search News"):
-    st.info(f"Searching for articles about '{query}' from {start_date} to {end_date}...")
+                # Download button
+                excel_file = to_excel(df)
+                st.download_button(
+                    label="Download Excel File",
+                    data=excel_file,
+                    file_name="news_articles.xlsx",
+                    mime="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+                )
+            else:
+                st.warning("No articles found for the given criteria.")
+    else:
+        st.error("Please provide all inputs.")
 
-    # Fetch news articles from Google News RSS feed
-    news_data = fetch_google_news(query)
-
-    # Filter articles by the selected date range
-    news_data = filter_articles_by_date(news_data, start_date, end_date)
-
-    # Limit the number of articles to display
-    news_data = news_data[:article_limit]
-
-    st.success(f"Collected {len(news_data)} articles.")
-
-    # Display a preview of the collected data
-    if news_data:
-        st.write("Here are the first few articles:")
-        for article in news_data:
-            st.write(f"**Title:** {article['title']}")
-            st.write(f"**Published:** {article['pub_date']}")
-            st.write(f"**Link:** {article['link']}")
-            st.write(f"**Summary:** {article['description']}")
-            st.write("---")
-
-        # Prepare CSV data
-        csv_headers = ['Title', 'Link', 'Published', 'Summary']
-        csv_data = [[article['title'], article['link'], article['pub_date'], article['description']] for article in news_data]
-
-        # Function to convert the data into a CSV format
-        def convert_to_csv(data):
-            csv_file = ""
-            for row in data:
-                csv_file += ','.join([f'"{col}"' for col in row]) + '\n'
-            return csv_file
-
-        # Allow user to download CSV
-        csv_file = convert_to_csv([csv_headers] + csv_data)
-        st.download_button(
-            label="Download CSV",
-            data=csv_file,
-            file_name="news_articles.csv",
-            mime="text/csv"
-        )
-# Copyright information
-
-st.markdown(
-    """
-    <style>
-    .footer {
-        position: fixed;
-        left: 0;
-        bottom: 0;
-        width: 100%;
-        background-color: lightgray;
-        color: black;
-        text-align: center;
-        padding: 10px;
-        font-size: 14px;
-    }
-    </style>
-    <div class="footer">
-        © 2024 Jubair Ahmed Nabin. All rights reserved.
-    </div>
-    """,
-    unsafe_allow_html=True
-)
+# Footer
+st.write("Powered by [NewsAPI](https://newsapi.org/)")
